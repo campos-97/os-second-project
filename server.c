@@ -16,6 +16,9 @@
 #include <fcntl.h>
 #include <dirent.h>
 
+#include <stdlib.h>
+#include <time.h>
+
 #include "tictactoe.h"
 
 #define MAX_CLIENTS 10
@@ -48,6 +51,7 @@ char ip[20];
 
 int player = 0;
 int board[SIDE][SIDE];
+int players = 0;
 
 int server_log(const char* message) {
     printf("%s\n", message);
@@ -110,11 +114,25 @@ char* actual_query(char* buffer){
     return buffer+s;
 }
 
-int send_move(int player, int x, int y) {
+void send_move(int player, int x, int y) {
     board[x][y] = player;
     printf("Player %d plays in %d - %d\n", player, x, y);
     if (gameOver(board) == 1) {
         printf("Player %d Wins\n", player);
+        return;
+    }
+    if (players == 1) {
+        do {
+            x = rand()%SIDE;
+            y = rand()%SIDE;
+        }
+        while (board[x][y] != -1);
+        board[x][y] = 1;
+        printf("Computer plays in %d - %d\n", x, y);
+    }
+    if (gameOver(board) == 1) {
+        printf("Computer Wins\n");
+        return;
     }
 }
 
@@ -126,6 +144,7 @@ int process_query(int client_socket_descriptor, struct sockaddr client, char* qu
         sprintf(tmp_str, "%d", player);
         printf("%d\n", player);
         player = (player+1)%2;
+        players++;
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
         write(client_socket_descriptor, tmp_str, 1);
     }
@@ -202,6 +221,8 @@ int main(int argc, char *argv[]) {
     //mkdir(image_path, 755);
     //reset_leds();
     //update_doors();
+
+    srand(time(NULL));
 
     initialise(board); 
 
