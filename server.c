@@ -16,6 +16,8 @@
 #include <fcntl.h>
 #include <dirent.h>
 
+#include "tictactoe.h"
+
 #define MAX_CLIENTS 10
 #define BUFFER_SIZE 2048
 
@@ -45,6 +47,7 @@ char image_path[] = "/tmp/server_images/";
 char ip[20];
 
 int player = 0;
+int board[SIDE][SIDE];
 
 int server_log(const char* message) {
     printf("%s\n", message);
@@ -108,7 +111,11 @@ char* actual_query(char* buffer){
 }
 
 int send_move(int player, int x, int y) {
+    board[x][y] = player;
     printf("Player %d plays in %d - %d\n", player, x, y);
+    if (gameOver(board) == 1) {
+        printf("Player %d Wins\n", player);
+    }
 }
 
 
@@ -195,6 +202,10 @@ int main(int argc, char *argv[]) {
     //mkdir(image_path, 755);
     //reset_leds();
     //update_doors();
+
+    initialise(board); 
+
+    //playTicTacToe(COMPUTER);
 
     while (1) {
         client_socket_descriptor = accept(server_socket_descriptor, &client, &client_length);
