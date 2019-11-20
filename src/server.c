@@ -156,6 +156,15 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
         close(prev_client);
         return;
     }
+    if (boardFull(board)) {
+        sprintf(tmp_str, "draw");
+        write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
+        write(client_socket_descriptor, tmp_str, 4);
+        close(client_socket_descriptor);
+        write(prev_client, html_web_text, sizeof(html_web_text) - 1);
+        write(prev_client, tmp_str, 4);
+        close(prev_client);
+    }
     if (players == 1) {
         do {
             i = rand()%SIDE;
@@ -188,6 +197,15 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
             write(client_socket_descriptor, tmp_str, 4);
             close(client_socket_descriptor);
             return;
+        }
+        if (boardFull(board)) {
+            sprintf(tmp_str, "draw");
+            write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
+            write(client_socket_descriptor, tmp_str, 4);
+            close(client_socket_descriptor);
+            write(prev_client, html_web_text, sizeof(html_web_text) - 1);
+            write(prev_client, tmp_str, 4);
+            close(prev_client);
         }
     } else {
         sprintf(tmp_str, "%d%d%d", player, i, j);

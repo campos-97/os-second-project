@@ -21,6 +21,9 @@ int columnCrossed(int board[][SIDE]);
 // A function that returns 1 if any of the diagonal 
 // is crossed with the same player's move 
 int diagonalCrossed(int board[][SIDE]);
+
+int boardFull(int board[][SIDE]);
+
 // A function that returns 1 if the game is over 
 // else it returns a 0 
 int gameOver(int board[][SIDE]);
