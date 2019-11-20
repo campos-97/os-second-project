@@ -1,4 +1,4 @@
-TOPDIR		:= $(PWD)/
+TOPDIR		:= $(PWD)
 LIB_DIR		= $(TOPDIR)/lib
 SRC_DIR		= $(TOPDIR)/src
 INCLUDE_DIR	= $(TOPDIR)/include
