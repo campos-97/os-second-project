@@ -20,6 +20,7 @@
 #include <time.h>
 
 #include "tictactoe.h"
+#include "libconsole.h"
 
 #define MAX_CLIENTS 10
 #define BUFFER_SIZE 2048
@@ -52,6 +53,8 @@ char ip[20];
 int player = 0;
 int board[SIDE][SIDE];
 int players = 0;
+
+int gridSize = 0; // 0->medium 1->large 2->small
 
 int server_log(const char* message) {
     printf("%s\n", message);
@@ -114,24 +117,39 @@ char* actual_query(char* buffer){
     return buffer+s;
 }
 
-void send_move(int player, int x, int y) {
-    board[x][y] = player;
-    printf("Player %d plays in %d - %d\n", player, x, y);
-    if (gameOver(board) == 1) {
+void cncDraw(int shape, int i, int j){
+    if(shape==0)drawX(i, j, gridSize);
+    else if(shape==1)drawCircle(i, j, gridSize);
+    else drawTriangle(i, j, gridSize);
+}
+
+// player : 0->X, 1->O, 2->Triangle
+void send_move(int player, int i, int j) {
+    board[i][j] = player;
+    printf("Player %d plays in %d - %d\n", player, i, j);
+
+    cncDraw(player, i, j);
+
+    int result = gameOver(board);
+    if (result != -1) {
         printf("Player %d Wins\n", player);
+        drawWin(result, gridSize);
         return;
     }
     if (players == 1) {
         do {
-            x = rand()%SIDE;
-            y = rand()%SIDE;
+            i = rand()%SIDE;
+            j = rand()%SIDE;
         }
-        while (board[x][y] != -1);
-        board[x][y] = 1;
-        printf("Computer plays in %d - %d\n", x, y);
+        while (board[i][j] != -1);
+        board[i][j] = (player+1)%3;
+        printf("Computer plays in %d - %d\n", i, j);
+        cncDraw((player+1)%3, i, j);
     }
-    if (gameOver(board) == 1) {
+    result = gameOver(board);
+    if (result != -1) {
         printf("Computer Wins\n");
+        drawWin(result, gridSize);
         return;
     }
 }
@@ -150,6 +168,12 @@ int process_query(int client_socket_descriptor, struct sockaddr client, char* qu
     }
     else if(strncmp(query, "/play", 5)==0){                          // Take photo
         send_move(query[5]-'0', query[6]-'0', query[7]-'0');
+        write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
+    }
+    else if(strncmp(query, "/grid", 5)==0){                          // Take photo
+        gridSize = query[5]-'0'; 
+        printf("gridSize: %d\n", gridSize);
+        drawGrid(gridSize);
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
     }
     /*else if(strncmp(query, "/led", 4)==0){                  // Change led
@@ -225,6 +249,8 @@ int main(int argc, char *argv[]) {
     srand(time(NULL));
 
     initialise(board); 
+
+    initComm();
 
     //playTicTacToe(COMPUTER);
 

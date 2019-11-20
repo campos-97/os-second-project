@@ -20,9 +20,9 @@ int rowCrossed(int board[][SIDE])
         if (board[i][0] == board[i][1] && 
             board[i][1] == board[i][2] &&  
             board[i][0] != -1) 
-            return 1; 
+            return i; 
     } 
-    return 0; 
+    return -1; 
 } 
   
 // A function that returns 1 if any of the column 
@@ -34,9 +34,9 @@ int columnCrossed(int board[][SIDE])
         if (board[0][i] == board[1][i] && 
             board[1][i] == board[2][i] &&  
             board[0][i] != -1) 
-            return 1; 
+            return i+3; 
     } 
-    return 0; 
+    return -1; 
 } 
   
 // A function that returns 1 if any of the diagonal 
@@ -46,20 +46,25 @@ int diagonalCrossed(int board[][SIDE])
     if (board[0][0] == board[1][1] && 
         board[1][1] == board[2][2] &&  
         board[0][0] != -1) 
-        return(1); 
+        return 6;
           
     if (board[0][2] == board[1][1] && 
         board[1][1] == board[2][0] && 
          board[0][2] != -1) 
-        return 1; 
+        return 7; 
   
-    return 0; 
+    return -1; 
 } 
   
 // A function that returns 1 if the game is over 
 // else it returns a 0 
 int gameOver(int board[][SIDE]) 
 { 
-    return(rowCrossed(board) || columnCrossed(board) 
-            || diagonalCrossed(board) ); 
+    int result = rowCrossed(board);
+    if(result != -1)return result;
+    result = columnCrossed(board);
+    if(result != -1)return result;
+    result = diagonalCrossed(board);
+    if(result != -1)return result;
+    return -1;
 } 
