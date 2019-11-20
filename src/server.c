@@ -140,6 +140,7 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
     if (result != -1) {
         printf("Player %d Wins\n", player);
         gameStarted = 0;
+        shapes = {0, 0, 0};
         drawWin(result, gridSize);
         return;
     }
@@ -164,6 +165,7 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
         if (result != -1) {
             printf("Computer Wins\n");
             gameStarted = 0;
+            shapes = {0, 0, 0};
             #ifdef CNC
             drawWin(result, gridSize);
             #endif
@@ -217,6 +219,7 @@ int process_query(int client_socket_descriptor, struct sockaddr client, char* qu
     } else if(strcmp(query, "/restart")==0){
         initialise(board);
         gameStarted = 0;
+        shapes = {0, 0, 0};
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
         close(client_socket_descriptor);
     }
