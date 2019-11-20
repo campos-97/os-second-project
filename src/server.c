@@ -120,6 +120,14 @@ char* actual_query(char* buffer){
     return buffer+s;
 }
 
+void restart(){
+    initialise(board);
+    gameStarted = 0;
+    for (int i = 0; i < 3; ++i) {
+        shapes[i] = 0;
+    }
+}
+
 void cncDraw(int shape, int i, int j){
     if(shape==0)drawX(i, j, gridSize);
     else if(shape==1)drawCircle(i, j, gridSize);
@@ -139,10 +147,7 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
     int result = gameOver(board);
     if (result != -1) {
         printf("Player %d Wins\n", player);
-        gameStarted = 0;
-        for (int i = 0; i < 3; ++i) {
-            shapes[i] = 0;
-        }
+        restart();
         #ifdef CNC
         drawWin(result, gridSize);
         #endif
@@ -164,6 +169,7 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
         write(prev_client, html_web_text, sizeof(html_web_text) - 1);
         write(prev_client, tmp_str, 4);
         close(prev_client);
+        restart();
     }
     if (players == 1) {
         do {
@@ -185,10 +191,7 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
         result = gameOver(board);
         if (result != -1) {
             printf("Computer Wins\n");
-            gameStarted = 0;
-            for (int i = 0; i < 3; ++i) {
-                shapes[i] = 0;
-            }
+            restart();
             #ifdef CNC
             drawWin(result, gridSize);
             #endif
@@ -206,6 +209,7 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
             write(prev_client, html_web_text, sizeof(html_web_text) - 1);
             write(prev_client, tmp_str, 4);
             close(prev_client);
+            restart();
         }
     } else {
         sprintf(tmp_str, "%d%d%d", player, i, j);
@@ -253,12 +257,9 @@ int process_query(int client_socket_descriptor, struct sockaddr client, char* qu
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
         close(client_socket_descriptor);
     } else if(strcmp(query, "/restart")==0){
-        initialise(board);
-        gameStarted = 0;
-        for (int i = 0; i < 3; ++i) {
-            shapes[i] = 0;
-        }
+        restart();
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
+        write(client_socket_descriptor, "ok", 2);
         close(client_socket_descriptor);
     }
     else if(strcmp(query, "/shapes")==0){
