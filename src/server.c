@@ -53,6 +53,7 @@ char ip[20];
 int player = 0;
 int board[SIDE][SIDE];
 int players = 0;
+int prev_client;
 
 int gridSize = 0; // 0->medium 1->large 2->small
 
@@ -124,10 +125,10 @@ void cncDraw(int shape, int i, int j){
 }
 
 // player : 0->X, 1->O, 2->Triangle
-void send_move(int player, int i, int j) {
+void send_move(int client_socket_descriptor, int player, int i, int j) {
     board[i][j] = player;
     printf("Player %d plays in %d - %d\n", player, i, j);
-
+    char tmp_str[5];
     cncDraw(player, i, j);
 
     int result = gameOver(board);
@@ -145,35 +146,51 @@ void send_move(int player, int i, int j) {
         board[i][j] = (player+1)%3;
         printf("Computer plays in %d - %d\n", i, j);
         cncDraw((player+1)%3, i, j);
-    }
-    result = gameOver(board);
-    if (result != -1) {
-        printf("Computer Wins\n");
-        drawWin(result, gridSize);
-        return;
+
+        sprintf(tmp_str, "%d%d", i, j);
+        write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
+        write(client_socket_descriptor, tmp_str, 2);
+
+        result = gameOver(board);
+        if (result != -1) {
+            printf("Computer Wins\n");
+            drawWin(result, gridSize);
+            return;
+        }
+    } else {
+        sprintf(tmp_str, "%d%d", i, j);
+        write(prev_client, html_web_text, sizeof(html_web_text) - 1);
+        write(prev_client, tmp_str, 2);
+        prev_client = client_socket_descriptor;
     }
 }
 
 
 int process_query(int client_socket_descriptor, struct sockaddr client, char* query){
-    if(strcmp(query, "/login")==0){                                // Take photo
-        //html_web_text[sizeof(html_web_text) - 1] = player + '0';
+    if(strcmp(query, "/login")==0){
         char tmp_str[5];
         sprintf(tmp_str, "%d", player);
         printf("%d\n", player);
         player = (player+1)%2;
+        if (players == 1) {
+            prev_client = client_socket_descriptor;
+        } else {
+            write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
+            write(client_socket_descriptor, tmp_str, 1);
+        }
         players++;
-        write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
-        write(client_socket_descriptor, tmp_str, 1);
     }
-    else if(strncmp(query, "/play", 5)==0){                          // Take photo
-        send_move(query[5]-'0', query[6]-'0', query[7]-'0');
+    else if(strncmp(query, "/play", 5)==0){
+        send_move(client_socket_descriptor, query[5]-'0', query[6]-'0', query[7]-'0');
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
     }
-    else if(strncmp(query, "/grid", 5)==0){                          // Take photo
+    else if(strncmp(query, "/grid", 5)==0){
         gridSize = query[5]-'0'; 
         printf("gridSize: %d\n", gridSize);
         drawGrid(gridSize);
+        write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
+    } else if(strcmp(query, "/restart")==0){
+        initialise(board);
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
     }
     /*else if(strncmp(query, "/led", 4)==0){                  // Change led
