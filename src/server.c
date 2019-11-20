@@ -49,11 +49,11 @@ char html_web_file[] =
 char image_path[] = "/tmp/server_images/";
 
 char ip[20];
-
-int player = 0;
 int board[SIDE][SIDE];
 int players = 0;
 int prev_client;
+int shapes[3] = {0, 0, 0};
+int gameStarted = 0;
 
 int gridSize = 0; // 0->medium 1->large 2->small
 
@@ -147,7 +147,7 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
         printf("Computer plays in %d - %d\n", i, j);
         cncDraw((player+1)%3, i, j);
 
-        sprintf(tmp_str, "%d%d", i, j);
+        sprintf(tmp_str, "%d%d%d", player, i, j);
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
         write(client_socket_descriptor, tmp_str, 2);
         close(client_socket_descriptor);
@@ -159,7 +159,7 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
             return;
         }
     } else {
-        sprintf(tmp_str, "%d%d", i, j);
+        sprintf(tmp_str, "%d%d%d", player, i, j);
         write(prev_client, html_web_text, sizeof(html_web_text) - 1);
         write(prev_client, tmp_str, 2);
         close(prev_client);
@@ -169,21 +169,27 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
 
 
 int process_query(int client_socket_descriptor, struct sockaddr client, char* query){
-    if(strcmp(query, "/login")==0){
-        char tmp_str[5];
-        sprintf(tmp_str, "%d", player);
-        printf("%d\n", player);
-        player = (player+1)%2;
-        if (players == 1) {
-            prev_client = client_socket_descriptor;
-        } else {
+    if(strncmp(query, "/login", 6)==0){
+        if (gameStarted) {
             write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
-            write(client_socket_descriptor, tmp_str, 1);
+            write(client_socket_descriptor, "started", 7);
             close(client_socket_descriptor);
+        } else {
+            //char tmp_str[5];
+            //sprintf(tmp_str, "%d", player);
+            shapes[query[6]-'0'] = 1;
+            if (players == 1) {
+                prev_client = client_socket_descriptor;
+            } else {
+                write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
+                write(client_socket_descriptor, "go", 2);
+                close(client_socket_descriptor);
+            }
+            players++;
         }
-        players++;
     }
     else if(strncmp(query, "/play", 5)==0){
+        gameStarted = 1;
         send_move(client_socket_descriptor, query[5]-'0', query[6]-'0', query[7]-'0');
         //write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
     }
@@ -197,6 +203,16 @@ int process_query(int client_socket_descriptor, struct sockaddr client, char* qu
         initialise(board);
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
         close(client_socket_descriptor);
+    }
+    else if(strcmp(query, "/shapes")==0){
+        write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
+        for (int i = 0; i < 3; ++i){
+            if (shapes[i] == 0){
+                write(client_socket_descriptor, '0'+i, 1);
+            }
+        }
+        close(client_socket_descriptor);
+        //write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
     }
     /*else if(strncmp(query, "/led", 4)==0){                  // Change led
         change_led(query[4], query[5]);
@@ -296,7 +312,7 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
 
-        close(client_socket_descriptor);
+        //close(client_socket_descriptor);
     }
 
     server_log("Server: .....Stop");
