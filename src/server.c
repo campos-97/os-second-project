@@ -140,7 +140,9 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
     if (result != -1) {
         printf("Player %d Wins\n", player);
         gameStarted = 0;
+#ifdef CNC
         drawWin(result, gridSize);
+#endif
         return;
     }
     if (players == 1) {
