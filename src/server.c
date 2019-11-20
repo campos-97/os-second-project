@@ -54,6 +54,7 @@ char ip[20];
 int board[SIDE][SIDE];
 int players = 0;
 int prev_client;
+int prev_player;
 int shapes[3] = {0, 0, 0};
 int gameStarted = 0;
 
@@ -154,7 +155,7 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
         cncDraw((player+1)%3, i, j);
 #endif
 
-        sprintf(tmp_str, "%d%d%d", player, i, j);
+        sprintf(tmp_str, "%d%d%d", (player+1)%3, i, j);
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
         write(client_socket_descriptor, tmp_str, 3);
         close(client_socket_descriptor);
@@ -168,11 +169,12 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
             return;
         }
     } else {
-        sprintf(tmp_str, "%d%d%d", player, i, j);
+        sprintf(tmp_str, "%d%d%d", prev_player, i, j);
         write(prev_client, html_web_text, sizeof(html_web_text) - 1);
         write(prev_client, tmp_str, 3);
         close(prev_client);
         prev_client = client_socket_descriptor;
+        prev_player = player;
     }
 }
 
@@ -189,6 +191,7 @@ int process_query(int client_socket_descriptor, struct sockaddr client, char* qu
             shapes[query[6]-'0'] = 1;
             if (players == 1) {
                 prev_client = client_socket_descriptor;
+                prev_player = query[6]-'0';
             } else {
                 write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
                 write(client_socket_descriptor, "go", 2);
