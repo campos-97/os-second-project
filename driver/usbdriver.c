@@ -1,15 +1,10 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright 2007, Frank A Kingswood <frank@kingswood-consulting.co.uk>
- * Copyright 2007, Werner Cornelius <werner@cornelius-consult.de>
- * Copyright 2009, Boris Hajduk <boris@hajduk.org>
- *
- * ch341.c implements a serial port driver for the Winchiphead CH341.
- *
- * The CH341 device can be used to implement an RS232 asynchronous
- * serial port, an IEEE-1284 parallel printer port or a memory-like
- * interface. In all cases the CH341 supports an I2C interface as well.
- * This driver only supports the asynchronous serial interface.
+ * This is an implementation of a tty driver for a CH341 device in
+ * linux, used for serial communication.
+ * None of this driver is completele original since it was based on 
+ * a linux driver already implemented.
+ * This driver implementation is based on the CH341 driver found at :
+ *		https://elixir.bootlin.com/linux/latest/source/drivers/usb/serial/CH341.c
  */
 
 #include <linux/kernel.h>
@@ -25,8 +20,8 @@
 #define DEFAULT_TIMEOUT   1000
 
 /* flags for IO-Bits */
-#define CH341_BIT_RTS (1 << 6)
-#define CH341_BIT_DTR (1 << 5)
+#define TTYDEV_BIT_RTS (1 << 6)
+#define TTYDEV_BIT_DTR (1 << 5)
 
 /******************************/
 /* interrupt pipe definitions */
@@ -38,46 +33,46 @@
 /* fourth irq byte normally 0xee */
 
 /* second interrupt byte */
-#define CH341_MULT_STAT 0x04 /* multiple status since last interrupt event */
+#define TTYDEV_MULT_STAT 0x04 /* multiple status since last interrupt event */
 
 /* status returned in third interrupt answer byte, inverted in data
    from irq */
-#define CH341_BIT_CTS 0x01
-#define CH341_BIT_DSR 0x02
-#define CH341_BIT_RI  0x04
-#define CH341_BIT_DCD 0x08
-#define CH341_BITS_MODEM_STAT 0x0f /* all bits */
+#define TTYDEV_BIT_CTS 0x01
+#define TTYDEV_BIT_DSR 0x02
+#define TTYDEV_BIT_RI  0x04
+#define TTYDEV_BIT_DCD 0x08
+#define TTYDEV_BITS_MODEM_STAT 0x0f /* all bits */
 
 /*******************************/
 /* baudrate calculation factor */
 /*******************************/
-#define CH341_BAUDBASE_FACTOR 1532620800
-#define CH341_BAUDBASE_DIVMAX 3
+#define TTYDEV_BAUDBASE_FACTOR 1532620800
+#define TTYDEV_BAUDBASE_DIVMAX 3
 
 /* Break support - the information used to implement this was gleaned from
  * the Net/FreeBSD uchcom.c driver by Takanori Watanabe.  Domo arigato.
  */
 
-#define CH341_REQ_READ_VERSION 0x5F
-#define CH341_REQ_WRITE_REG    0x9A
-#define CH341_REQ_READ_REG     0x95
-#define CH341_REQ_SERIAL_INIT  0xA1
-#define CH341_REQ_MODEM_CTRL   0xA4
+#define TTYDEV_REQ_READ_VERSION 0x5F
+#define TTYDEV_REQ_WRITE_REG    0x9A
+#define TTYDEV_REQ_READ_REG     0x95
+#define TTYDEV_REQ_SERIAL_INIT  0xA1
+#define TTYDEV_REQ_MODEM_CTRL   0xA4
 
-#define CH341_REG_BREAK        0x05
-#define CH341_REG_LCR          0x18
-#define CH341_NBREAK_BITS      0x01
+#define TTYDEV_REG_BREAK        0x05
+#define TTYDEV_REG_LCR          0x18
+#define TTYDEV_NBREAK_BITS      0x01
 
-#define CH341_LCR_ENABLE_RX    0x80
-#define CH341_LCR_ENABLE_TX    0x40
-#define CH341_LCR_MARK_SPACE   0x20
-#define CH341_LCR_PAR_EVEN     0x10
-#define CH341_LCR_ENABLE_PAR   0x08
-#define CH341_LCR_STOP_BITS_2  0x04
-#define CH341_LCR_CS8          0x03
-#define CH341_LCR_CS7          0x02
-#define CH341_LCR_CS6          0x01
-#define CH341_LCR_CS5          0x00
+#define TTYDEV_LCR_ENABLE_RX    0x80
+#define TTYDEV_LCR_ENABLE_TX    0x40
+#define TTYDEV_LCR_MARK_SPACE   0x20
+#define TTYDEV_LCR_PAR_EVEN     0x10
+#define TTYDEV_LCR_ENABLE_PAR   0x08
+#define TTYDEV_LCR_STOP_BITS_2  0x04
+#define TTYDEV_LCR_CS8          0x03
+#define TTYDEV_LCR_CS7          0x02
+#define TTYDEV_LCR_CS6          0x01
+#define TTYDEV_LCR_CS5          0x00
 
 static const struct usb_device_id id_table[] = {
 	{ USB_DEVICE(0x4348, 0x5523) },
@@ -87,7 +82,7 @@ static const struct usb_device_id id_table[] = {
 };
 MODULE_DEVICE_TABLE(usb, id_table);
 
-struct ch341_private {
+struct TTYDEV_private {
 	spinlock_t lock; /* access lock */
 	unsigned baud_rate; /* set baud rate */
 	u8 mcr;
@@ -95,11 +90,11 @@ struct ch341_private {
 	u8 lcr;
 };
 
-static void ch341_set_termios(struct tty_struct *tty,
+static void TTYDEV_set_termios(struct tty_struct *tty,
 			      struct usb_serial_port *port,
 			      struct ktermios *old_termios);
 
-static int ch341_control_out(struct usb_device *dev, u8 request,
+static int TTYDEV_control_out(struct usb_device *dev, u8 request,
 			     u16 value, u16 index)
 {
 	int r;
@@ -116,7 +111,7 @@ static int ch341_control_out(struct usb_device *dev, u8 request,
 	return r;
 }
 
-static int ch341_control_in(struct usb_device *dev,
+static int TTYDEV_control_in(struct usb_device *dev,
 			    u8 request, u16 value, u16 index,
 			    char *buf, unsigned bufsize)
 {
@@ -144,8 +139,8 @@ static int ch341_control_in(struct usb_device *dev,
 	return 0;
 }
 
-static int ch341_set_baudrate_lcr(struct usb_device *dev,
-				  struct ch341_private *priv, u8 lcr)
+static int TTYDEV_set_baudrate_lcr(struct usb_device *dev,
+				  struct TTYDEV_private *priv, u8 lcr)
 {
 	short a;
 	int r;
@@ -154,8 +149,8 @@ static int ch341_set_baudrate_lcr(struct usb_device *dev,
 
 	if (!priv->baud_rate)
 		return -EINVAL;
-	factor = (CH341_BAUDBASE_FACTOR / priv->baud_rate);
-	divisor = CH341_BAUDBASE_DIVMAX;
+	factor = (TTYDEV_BAUDBASE_FACTOR / priv->baud_rate);
+	divisor = TTYDEV_BAUDBASE_DIVMAX;
 
 	while ((factor > 0xfff0) && divisor) {
 		factor >>= 3;
@@ -169,28 +164,28 @@ static int ch341_set_baudrate_lcr(struct usb_device *dev,
 	a = (factor & 0xff00) | divisor;
 
 	/*
-	 * CH341A buffers data until a full endpoint-size packet (32 bytes)
+	 * TTYDEVA buffers data until a full endpoint-size packet (32 bytes)
 	 * has been received unless bit 7 is set.
 	 */
 	a |= BIT(7);
 
-	r = ch341_control_out(dev, CH341_REQ_WRITE_REG, 0x1312, a);
+	r = TTYDEV_control_out(dev, TTYDEV_REQ_WRITE_REG, 0x1312, a);
 	if (r)
 		return r;
 
-	r = ch341_control_out(dev, CH341_REQ_WRITE_REG, 0x2518, lcr);
+	r = TTYDEV_control_out(dev, TTYDEV_REQ_WRITE_REG, 0x2518, lcr);
 	if (r)
 		return r;
 
 	return r;
 }
 
-static int ch341_set_handshake(struct usb_device *dev, u8 control)
+static int TTYDEV_set_handshake(struct usb_device *dev, u8 control)
 {
-	return ch341_control_out(dev, CH341_REQ_MODEM_CTRL, ~control, 0);
+	return TTYDEV_control_out(dev, TTYDEV_REQ_MODEM_CTRL, ~control, 0);
 }
 
-static int ch341_get_status(struct usb_device *dev, struct ch341_private *priv)
+static int TTYDEV_get_status(struct usb_device *dev, struct TTYDEV_private *priv)
 {
 	const unsigned int size = 2;
 	char *buffer;
@@ -201,12 +196,12 @@ static int ch341_get_status(struct usb_device *dev, struct ch341_private *priv)
 	if (!buffer)
 		return -ENOMEM;
 
-	r = ch341_control_in(dev, CH341_REQ_READ_REG, 0x0706, 0, buffer, size);
+	r = TTYDEV_control_in(dev, TTYDEV_REQ_READ_REG, 0x0706, 0, buffer, size);
 	if (r < 0)
 		goto out;
 
 	spin_lock_irqsave(&priv->lock, flags);
-	priv->msr = (~(*buffer)) & CH341_BITS_MODEM_STAT;
+	priv->msr = (~(*buffer)) & TTYDEV_BITS_MODEM_STAT;
 	spin_unlock_irqrestore(&priv->lock, flags);
 
 out:	kfree(buffer);
@@ -215,7 +210,7 @@ out:	kfree(buffer);
 
 /* -------------------------------------------------------------------------- */
 
-static int ch341_configure(struct usb_device *dev, struct ch341_private *priv)
+static int TTYDEV_configure(struct usb_device *dev, struct TTYDEV_private *priv)
 {
 	const unsigned int size = 2;
 	char *buffer;
@@ -226,31 +221,31 @@ static int ch341_configure(struct usb_device *dev, struct ch341_private *priv)
 		return -ENOMEM;
 
 	/* expect two bytes 0x27 0x00 */
-	r = ch341_control_in(dev, CH341_REQ_READ_VERSION, 0, 0, buffer, size);
+	r = TTYDEV_control_in(dev, TTYDEV_REQ_READ_VERSION, 0, 0, buffer, size);
 	if (r < 0)
 		goto out;
 	dev_dbg(&dev->dev, "Chip version: 0x%02x\n", buffer[0]);
 
-	r = ch341_control_out(dev, CH341_REQ_SERIAL_INIT, 0, 0);
+	r = TTYDEV_control_out(dev, TTYDEV_REQ_SERIAL_INIT, 0, 0);
 	if (r < 0)
 		goto out;
 
-	r = ch341_set_baudrate_lcr(dev, priv, priv->lcr);
+	r = TTYDEV_set_baudrate_lcr(dev, priv, priv->lcr);
 	if (r < 0)
 		goto out;
 
-	r = ch341_set_handshake(dev, priv->mcr);
+	r = TTYDEV_set_handshake(dev, priv->mcr);
 
 out:	kfree(buffer);
 	return r;
 }
 
-static int ch341_port_probe(struct usb_serial_port *port)
+static int TTYDEV_port_probe(struct usb_serial_port *port)
 {
-	struct ch341_private *priv;
+	struct TTYDEV_private *priv;
 	int r;
 
-	priv = kzalloc(sizeof(struct ch341_private), GFP_KERNEL);
+	priv = kzalloc(sizeof(struct TTYDEV_private), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
@@ -260,13 +255,13 @@ static int ch341_port_probe(struct usb_serial_port *port)
 	 * Some CH340 devices appear unable to change the initial LCR
 	 * settings, so set a sane 8N1 default.
 	 */
-	priv->lcr = CH341_LCR_ENABLE_RX | CH341_LCR_ENABLE_TX | CH341_LCR_CS8;
+	priv->lcr = TTYDEV_LCR_ENABLE_RX | TTYDEV_LCR_ENABLE_TX | TTYDEV_LCR_CS8;
 
-	r = ch341_configure(port->serial->dev, priv);
+	r = TTYDEV_configure(port->serial->dev, priv);
 	if (r < 0)
 		goto error;
 
-	printk("New device connected.");
+	printk("New device connected to my tty driver.");
 
 	usb_set_serial_port_data(port, priv);
 	return 0;
@@ -275,40 +270,42 @@ error:	kfree(priv);
 	return r;
 }
 
-static int ch341_port_remove(struct usb_serial_port *port)
+static int TTYDEV_port_remove(struct usb_serial_port *port)
 {
-	struct ch341_private *priv;
+	struct TTYDEV_private *priv;
 
 	priv = usb_get_serial_port_data(port);
 	kfree(priv);
 
+	printk("Device remved from my tty driver.");
+
 	return 0;
 }
 
-static int ch341_carrier_raised(struct usb_serial_port *port)
+static int TTYDEV_carrier_raised(struct usb_serial_port *port)
 {
-	struct ch341_private *priv = usb_get_serial_port_data(port);
-	if (priv->msr & CH341_BIT_DCD)
+	struct TTYDEV_private *priv = usb_get_serial_port_data(port);
+	if (priv->msr & TTYDEV_BIT_DCD)
 		return 1;
 	return 0;
 }
 
-static void ch341_dtr_rts(struct usb_serial_port *port, int on)
+static void TTYDEV_dtr_rts(struct usb_serial_port *port, int on)
 {
-	struct ch341_private *priv = usb_get_serial_port_data(port);
+	struct TTYDEV_private *priv = usb_get_serial_port_data(port);
 	unsigned long flags;
 
 	/* drop DTR and RTS */
 	spin_lock_irqsave(&priv->lock, flags);
 	if (on)
-		priv->mcr |= CH341_BIT_RTS | CH341_BIT_DTR;
+		priv->mcr |= TTYDEV_BIT_RTS | TTYDEV_BIT_DTR;
 	else
-		priv->mcr &= ~(CH341_BIT_RTS | CH341_BIT_DTR);
+		priv->mcr &= ~(TTYDEV_BIT_RTS | TTYDEV_BIT_DTR);
 	spin_unlock_irqrestore(&priv->lock, flags);
-	ch341_set_handshake(port->serial->dev, priv->mcr);
+	TTYDEV_set_handshake(port->serial->dev, priv->mcr);
 }
 
-static void ch341_close(struct usb_serial_port *port)
+static void TTYDEV_close(struct usb_serial_port *port)
 {
 	usb_serial_generic_close(port);
 	usb_kill_urb(port->interrupt_in_urb);
@@ -316,13 +313,13 @@ static void ch341_close(struct usb_serial_port *port)
 
 
 /* open this device, set default parameters */
-static int ch341_open(struct tty_struct *tty, struct usb_serial_port *port)
+static int TTYDEV_open(struct tty_struct *tty, struct usb_serial_port *port)
 {
-	struct ch341_private *priv = usb_get_serial_port_data(port);
+	struct TTYDEV_private *priv = usb_get_serial_port_data(port);
 	int r;
 
 	if (tty)
-		ch341_set_termios(tty, port, NULL);
+		TTYDEV_set_termios(tty, port, NULL);
 
 	dev_dbg(&port->dev, "%s - submitting interrupt urb\n", __func__);
 	r = usb_submit_urb(port->interrupt_in_urb, GFP_KERNEL);
@@ -332,7 +329,7 @@ static int ch341_open(struct tty_struct *tty, struct usb_serial_port *port)
 		return r;
 	}
 
-	r = ch341_get_status(port->serial->dev, priv);
+	r = TTYDEV_get_status(port->serial->dev, priv);
 	if (r < 0) {
 		dev_err(&port->dev, "failed to read modem status: %d\n", r);
 		goto err_kill_interrupt_urb;
@@ -353,10 +350,10 @@ err_kill_interrupt_urb:
 /* Old_termios contains the original termios settings and
  * tty->termios contains the new setting to be used.
  */
-static void ch341_set_termios(struct tty_struct *tty,
+static void TTYDEV_set_termios(struct tty_struct *tty,
 		struct usb_serial_port *port, struct ktermios *old_termios)
 {
-	struct ch341_private *priv = usb_get_serial_port_data(port);
+	struct TTYDEV_private *priv = usb_get_serial_port_data(port);
 	unsigned baud_rate;
 	unsigned long flags;
 	u8 lcr;
@@ -368,38 +365,38 @@ static void ch341_set_termios(struct tty_struct *tty,
 
 	baud_rate = tty_get_baud_rate(tty);
 
-	lcr = CH341_LCR_ENABLE_RX | CH341_LCR_ENABLE_TX;
+	lcr = TTYDEV_LCR_ENABLE_RX | TTYDEV_LCR_ENABLE_TX;
 
 	switch (C_CSIZE(tty)) {
 	case CS5:
-		lcr |= CH341_LCR_CS5;
+		lcr |= TTYDEV_LCR_CS5;
 		break;
 	case CS6:
-		lcr |= CH341_LCR_CS6;
+		lcr |= TTYDEV_LCR_CS6;
 		break;
 	case CS7:
-		lcr |= CH341_LCR_CS7;
+		lcr |= TTYDEV_LCR_CS7;
 		break;
 	case CS8:
-		lcr |= CH341_LCR_CS8;
+		lcr |= TTYDEV_LCR_CS8;
 		break;
 	}
 
 	if (C_PARENB(tty)) {
-		lcr |= CH341_LCR_ENABLE_PAR;
+		lcr |= TTYDEV_LCR_ENABLE_PAR;
 		if (C_PARODD(tty) == 0)
-			lcr |= CH341_LCR_PAR_EVEN;
+			lcr |= TTYDEV_LCR_PAR_EVEN;
 		if (C_CMSPAR(tty))
-			lcr |= CH341_LCR_MARK_SPACE;
+			lcr |= TTYDEV_LCR_MARK_SPACE;
 	}
 
 	if (C_CSTOPB(tty))
-		lcr |= CH341_LCR_STOP_BITS_2;
+		lcr |= TTYDEV_LCR_STOP_BITS_2;
 
 	if (baud_rate) {
 		priv->baud_rate = baud_rate;
 
-		r = ch341_set_baudrate_lcr(port->serial->dev, priv, lcr);
+		r = TTYDEV_set_baudrate_lcr(port->serial->dev, priv, lcr);
 		if (r < 0 && old_termios) {
 			priv->baud_rate = tty_termios_baud_rate(old_termios);
 			tty_termios_copy_hw(&tty->termios, old_termios);
@@ -410,18 +407,18 @@ static void ch341_set_termios(struct tty_struct *tty,
 
 	spin_lock_irqsave(&priv->lock, flags);
 	if (C_BAUD(tty) == B0)
-		priv->mcr &= ~(CH341_BIT_DTR | CH341_BIT_RTS);
+		priv->mcr &= ~(TTYDEV_BIT_DTR | TTYDEV_BIT_RTS);
 	else if (old_termios && (old_termios->c_cflag & CBAUD) == B0)
-		priv->mcr |= (CH341_BIT_DTR | CH341_BIT_RTS);
+		priv->mcr |= (TTYDEV_BIT_DTR | TTYDEV_BIT_RTS);
 	spin_unlock_irqrestore(&priv->lock, flags);
 
-	ch341_set_handshake(port->serial->dev, priv->mcr);
+	TTYDEV_set_handshake(port->serial->dev, priv->mcr);
 }
 
-static void ch341_break_ctl(struct tty_struct *tty, int break_state)
+static void TTYDEV_break_ctl(struct tty_struct *tty, int break_state)
 {
-	const uint16_t ch341_break_reg =
-			((uint16_t) CH341_REG_LCR << 8) | CH341_REG_BREAK;
+	const uint16_t TTYDEV_break_reg =
+			((uint16_t) TTYDEV_REG_LCR << 8) | TTYDEV_REG_BREAK;
 	struct usb_serial_port *port = tty->driver_data;
 	int r;
 	uint16_t reg_contents;
@@ -431,29 +428,29 @@ static void ch341_break_ctl(struct tty_struct *tty, int break_state)
 	if (!break_reg)
 		return;
 
-	r = ch341_control_in(port->serial->dev, CH341_REQ_READ_REG,
-			ch341_break_reg, 0, break_reg, 2);
+	r = TTYDEV_control_in(port->serial->dev, TTYDEV_REQ_READ_REG,
+			TTYDEV_break_reg, 0, break_reg, 2);
 	if (r < 0) {
 		dev_err(&port->dev, "%s - USB control read error (%d)\n",
 				__func__, r);
 		goto out;
 	}
-	dev_dbg(&port->dev, "%s - initial ch341 break register contents - reg1: %x, reg2: %x\n",
+	dev_dbg(&port->dev, "%s - initial TTYDEV break register contents - reg1: %x, reg2: %x\n",
 		__func__, break_reg[0], break_reg[1]);
 	if (break_state != 0) {
 		dev_dbg(&port->dev, "%s - Enter break state requested\n", __func__);
-		break_reg[0] &= ~CH341_NBREAK_BITS;
-		break_reg[1] &= ~CH341_LCR_ENABLE_TX;
+		break_reg[0] &= ~TTYDEV_NBREAK_BITS;
+		break_reg[1] &= ~TTYDEV_LCR_ENABLE_TX;
 	} else {
 		dev_dbg(&port->dev, "%s - Leave break state requested\n", __func__);
-		break_reg[0] |= CH341_NBREAK_BITS;
-		break_reg[1] |= CH341_LCR_ENABLE_TX;
+		break_reg[0] |= TTYDEV_NBREAK_BITS;
+		break_reg[1] |= TTYDEV_LCR_ENABLE_TX;
 	}
-	dev_dbg(&port->dev, "%s - New ch341 break register contents - reg1: %x, reg2: %x\n",
+	dev_dbg(&port->dev, "%s - New TTYDEV break register contents - reg1: %x, reg2: %x\n",
 		__func__, break_reg[0], break_reg[1]);
 	reg_contents = get_unaligned_le16(break_reg);
-	r = ch341_control_out(port->serial->dev, CH341_REQ_WRITE_REG,
-			ch341_break_reg, reg_contents);
+	r = TTYDEV_control_out(port->serial->dev, TTYDEV_REQ_WRITE_REG,
+			TTYDEV_break_reg, reg_contents);
 	if (r < 0)
 		dev_err(&port->dev, "%s - USB control write error (%d)\n",
 				__func__, r);
@@ -461,33 +458,33 @@ out:
 	kfree(break_reg);
 }
 
-static int ch341_tiocmset(struct tty_struct *tty,
+static int TTYDEV_tiocmset(struct tty_struct *tty,
 			  unsigned int set, unsigned int clear)
 {
 	struct usb_serial_port *port = tty->driver_data;
-	struct ch341_private *priv = usb_get_serial_port_data(port);
+	struct TTYDEV_private *priv = usb_get_serial_port_data(port);
 	unsigned long flags;
 	u8 control;
 
 	spin_lock_irqsave(&priv->lock, flags);
 	if (set & TIOCM_RTS)
-		priv->mcr |= CH341_BIT_RTS;
+		priv->mcr |= TTYDEV_BIT_RTS;
 	if (set & TIOCM_DTR)
-		priv->mcr |= CH341_BIT_DTR;
+		priv->mcr |= TTYDEV_BIT_DTR;
 	if (clear & TIOCM_RTS)
-		priv->mcr &= ~CH341_BIT_RTS;
+		priv->mcr &= ~TTYDEV_BIT_RTS;
 	if (clear & TIOCM_DTR)
-		priv->mcr &= ~CH341_BIT_DTR;
+		priv->mcr &= ~TTYDEV_BIT_DTR;
 	control = priv->mcr;
 	spin_unlock_irqrestore(&priv->lock, flags);
 
-	return ch341_set_handshake(port->serial->dev, control);
+	return TTYDEV_set_handshake(port->serial->dev, control);
 }
 
-static void ch341_update_status(struct usb_serial_port *port,
+static void TTYDEV_update_status(struct usb_serial_port *port,
 					unsigned char *data, size_t len)
 {
-	struct ch341_private *priv = usb_get_serial_port_data(port);
+	struct TTYDEV_private *priv = usb_get_serial_port_data(port);
 	struct tty_struct *tty;
 	unsigned long flags;
 	u8 status;
@@ -496,31 +493,31 @@ static void ch341_update_status(struct usb_serial_port *port,
 	if (len < 4)
 		return;
 
-	status = ~data[2] & CH341_BITS_MODEM_STAT;
+	status = ~data[2] & TTYDEV_BITS_MODEM_STAT;
 
 	spin_lock_irqsave(&priv->lock, flags);
 	delta = status ^ priv->msr;
 	priv->msr = status;
 	spin_unlock_irqrestore(&priv->lock, flags);
 
-	if (data[1] & CH341_MULT_STAT)
+	if (data[1] & TTYDEV_MULT_STAT)
 		dev_dbg(&port->dev, "%s - multiple status change\n", __func__);
 
 	if (!delta)
 		return;
 
-	if (delta & CH341_BIT_CTS)
+	if (delta & TTYDEV_BIT_CTS)
 		port->icount.cts++;
-	if (delta & CH341_BIT_DSR)
+	if (delta & TTYDEV_BIT_DSR)
 		port->icount.dsr++;
-	if (delta & CH341_BIT_RI)
+	if (delta & TTYDEV_BIT_RI)
 		port->icount.rng++;
-	if (delta & CH341_BIT_DCD) {
+	if (delta & TTYDEV_BIT_DCD) {
 		port->icount.dcd++;
 		tty = tty_port_tty_get(&port->port);
 		if (tty) {
 			usb_serial_handle_dcd_change(port, tty,
-						status & CH341_BIT_DCD);
+						status & TTYDEV_BIT_DCD);
 			tty_kref_put(tty);
 		}
 	}
@@ -528,7 +525,7 @@ static void ch341_update_status(struct usb_serial_port *port,
 	wake_up_interruptible(&port->port.delta_msr_wait);
 }
 
-static void ch341_read_int_callback(struct urb *urb)
+static void TTYDEV_read_int_callback(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
 	unsigned char *data = urb->transfer_buffer;
@@ -553,7 +550,7 @@ static void ch341_read_int_callback(struct urb *urb)
 	}
 
 	usb_serial_debug_data(&port->dev, __func__, len, data);
-	ch341_update_status(port, data, len);
+	TTYDEV_update_status(port, data, len);
 exit:
 	status = usb_submit_urb(urb, GFP_ATOMIC);
 	if (status) {
@@ -562,10 +559,10 @@ exit:
 	}
 }
 
-static int ch341_tiocmget(struct tty_struct *tty)
+static int TTYDEV_tiocmget(struct tty_struct *tty)
 {
 	struct usb_serial_port *port = tty->driver_data;
-	struct ch341_private *priv = usb_get_serial_port_data(port);
+	struct TTYDEV_private *priv = usb_get_serial_port_data(port);
 	unsigned long flags;
 	u8 mcr;
 	u8 status;
@@ -576,26 +573,26 @@ static int ch341_tiocmget(struct tty_struct *tty)
 	status = priv->msr;
 	spin_unlock_irqrestore(&priv->lock, flags);
 
-	result = ((mcr & CH341_BIT_DTR)		? TIOCM_DTR : 0)
-		  | ((mcr & CH341_BIT_RTS)	? TIOCM_RTS : 0)
-		  | ((status & CH341_BIT_CTS)	? TIOCM_CTS : 0)
-		  | ((status & CH341_BIT_DSR)	? TIOCM_DSR : 0)
-		  | ((status & CH341_BIT_RI)	? TIOCM_RI  : 0)
-		  | ((status & CH341_BIT_DCD)	? TIOCM_CD  : 0);
+	result = ((mcr & TTYDEV_BIT_DTR)		? TIOCM_DTR : 0)
+		  | ((mcr & TTYDEV_BIT_RTS)	? TIOCM_RTS : 0)
+		  | ((status & TTYDEV_BIT_CTS)	? TIOCM_CTS : 0)
+		  | ((status & TTYDEV_BIT_DSR)	? TIOCM_DSR : 0)
+		  | ((status & TTYDEV_BIT_RI)	? TIOCM_RI  : 0)
+		  | ((status & TTYDEV_BIT_DCD)	? TIOCM_CD  : 0);
 
 	dev_dbg(&port->dev, "%s - result = %x\n", __func__, result);
 
 	return result;
 }
 
-static int ch341_reset_resume(struct usb_serial *serial)
+static int TTYDEV_reset_resume(struct usb_serial *serial)
 {
 	struct usb_serial_port *port = serial->port[0];
-	struct ch341_private *priv = usb_get_serial_port_data(port);
+	struct TTYDEV_private *priv = usb_get_serial_port_data(port);
 	int ret;
 
-	/* reconfigure ch341 serial port after bus-reset */
-	ch341_configure(serial->dev, priv);
+	/* reconfigure TTYDEV serial port after bus-reset */
+	TTYDEV_configure(serial->dev, priv);
 
 	if (tty_port_initialized(&port->port)) {
 		ret = usb_submit_urb(port->interrupt_in_urb, GFP_NOIO);
@@ -605,7 +602,7 @@ static int ch341_reset_resume(struct usb_serial *serial)
 			return ret;
 		}
 
-		ret = ch341_get_status(port->serial->dev, priv);
+		ret = TTYDEV_get_status(port->serial->dev, priv);
 		if (ret < 0) {
 			dev_err(&port->dev, "failed to read modem status: %d\n",
 				ret);
@@ -615,30 +612,30 @@ static int ch341_reset_resume(struct usb_serial *serial)
 	return usb_serial_generic_resume(serial);
 }
 
-static struct usb_serial_driver ch341_device = {
+static struct usb_serial_driver TTYDEV_device = {
 	.driver = {
 		.owner	= THIS_MODULE,
 		.name	= "my_usb_driver",
 	},
 	.id_table          = id_table,
 	.num_ports         = 1,
-	.open              = ch341_open,
-	.dtr_rts	   = ch341_dtr_rts,
-	.carrier_raised	   = ch341_carrier_raised,
-	.close             = ch341_close,
-	.set_termios       = ch341_set_termios,
-	.break_ctl         = ch341_break_ctl,
-	.tiocmget          = ch341_tiocmget,
-	.tiocmset          = ch341_tiocmset,
+	.open              = TTYDEV_open,
+	.dtr_rts	   = TTYDEV_dtr_rts,
+	.carrier_raised	   = TTYDEV_carrier_raised,
+	.close             = TTYDEV_close,
+	.set_termios       = TTYDEV_set_termios,
+	.break_ctl         = TTYDEV_break_ctl,
+	.tiocmget          = TTYDEV_tiocmget,
+	.tiocmset          = TTYDEV_tiocmset,
 	.tiocmiwait        = usb_serial_generic_tiocmiwait,
-	.read_int_callback = ch341_read_int_callback,
-	.port_probe        = ch341_port_probe,
-	.port_remove       = ch341_port_remove,
-	.reset_resume      = ch341_reset_resume,
+	.read_int_callback = TTYDEV_read_int_callback,
+	.port_probe        = TTYDEV_port_probe,
+	.port_remove       = TTYDEV_port_remove,
+	.reset_resume      = TTYDEV_reset_resume,
 };
 
 static struct usb_serial_driver * const serial_drivers[] = {
-	&ch341_device, NULL
+	&TTYDEV_device, NULL
 };
 
 module_usb_serial_driver(serial_drivers, id_table);

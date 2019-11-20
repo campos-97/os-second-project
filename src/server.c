@@ -22,6 +22,8 @@
 #include "tictactoe.h"
 #include "libconsole.h"
 
+//#define CNC 0
+
 #define MAX_CLIENTS 10
 #define BUFFER_SIZE 2048
 
@@ -129,7 +131,10 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
     board[i][j] = player;
     printf("Player %d plays in %d - %d\n", player, i, j);
     char tmp_str[5];
+
+#ifdef CNC
     cncDraw(player, i, j);
+#endif
 
     int result = gameOver(board);
     if (result != -1) {
@@ -145,23 +150,27 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
         while (board[i][j] != -1);
         board[i][j] = (player+1)%3;
         printf("Computer plays in %d - %d\n", i, j);
+#ifdef CNC
         cncDraw((player+1)%3, i, j);
+#endif
 
         sprintf(tmp_str, "%d%d%d", player, i, j);
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
-        write(client_socket_descriptor, tmp_str, 2);
+        write(client_socket_descriptor, tmp_str, 3);
         close(client_socket_descriptor);
 
         result = gameOver(board);
         if (result != -1) {
             printf("Computer Wins\n");
+#ifdef CNC
             drawWin(result, gridSize);
+#endif
             return;
         }
     } else {
         sprintf(tmp_str, "%d%d%d", player, i, j);
         write(prev_client, html_web_text, sizeof(html_web_text) - 1);
-        write(prev_client, tmp_str, 2);
+        write(prev_client, tmp_str, 3);
         close(prev_client);
         prev_client = client_socket_descriptor;
     }
@@ -196,7 +205,9 @@ int process_query(int client_socket_descriptor, struct sockaddr client, char* qu
     else if(strncmp(query, "/grid", 5)==0){
         gridSize = query[5]-'0'; 
         printf("gridSize: %d\n", gridSize);
+#ifdef CNC
         drawGrid(gridSize);
+#endif
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
         close(client_socket_descriptor);
     } else if(strcmp(query, "/restart")==0){
@@ -208,7 +219,9 @@ int process_query(int client_socket_descriptor, struct sockaddr client, char* qu
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
         for (int i = 0; i < 3; ++i){
             if (shapes[i] == 0){
-                write(client_socket_descriptor, '0'+i, 1);
+                char tmp_str[5];
+                sprintf(tmp_str, "%c", '0'+i);
+                write(client_socket_descriptor, tmp_str, 1);
             }
         }
         close(client_socket_descriptor);
@@ -289,7 +302,9 @@ int main(int argc, char *argv[]) {
 
     initialise(board); 
 
+#ifdef CNC
     initComm();
+#endif
 
     //playTicTacToe(COMPUTER);
 
