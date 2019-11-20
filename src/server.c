@@ -54,7 +54,6 @@ char ip[20];
 int board[SIDE][SIDE];
 int players = 0;
 int prev_client;
-int prev_player;
 int shapes[3] = {0, 0, 0};
 int gameStarted = 0;
 
@@ -133,13 +132,14 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
     printf("Player %d plays in %d - %d\n", player, i, j);
     char tmp_str[5];
 
-#ifdef CNC
+    #ifdef CNC
     cncDraw(player, i, j);
-#endif
+    #endif
 
     int result = gameOver(board);
     if (result != -1) {
         printf("Player %d Wins\n", player);
+        gameStarted = 0;
         drawWin(result, gridSize);
         return;
     }
@@ -151,9 +151,9 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
         while (board[i][j] != -1);
         board[i][j] = (player+1)%3;
         printf("Computer plays in %d - %d\n", i, j);
-#ifdef CNC
+        #ifdef CNC
         cncDraw((player+1)%3, i, j);
-#endif
+        #endif
 
         sprintf(tmp_str, "%d%d%d", (player+1)%3, i, j);
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
@@ -163,18 +163,19 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
         result = gameOver(board);
         if (result != -1) {
             printf("Computer Wins\n");
-#ifdef CNC
+            gameStarted = 0;
+            #ifdef CNC
             drawWin(result, gridSize);
-#endif
+            #endif
             return;
         }
     } else {
-        sprintf(tmp_str, "%d%d%d", prev_player, i, j);
+        sprintf(tmp_str, "%d%d%d", player, i, j);
         write(prev_client, html_web_text, sizeof(html_web_text) - 1);
         write(prev_client, tmp_str, 3);
         close(prev_client);
         prev_client = client_socket_descriptor;
-        prev_player = player;
+        //prev_player = player;
     }
 }
 
@@ -191,7 +192,7 @@ int process_query(int client_socket_descriptor, struct sockaddr client, char* qu
             shapes[query[6]-'0'] = 1;
             if (players == 1) {
                 prev_client = client_socket_descriptor;
-                prev_player = query[6]-'0';
+                //prev_player = query[6]-'0';
             } else {
                 write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
                 write(client_socket_descriptor, "go", 2);
@@ -208,13 +209,14 @@ int process_query(int client_socket_descriptor, struct sockaddr client, char* qu
     else if(strncmp(query, "/grid", 5)==0){
         gridSize = query[5]-'0'; 
         printf("gridSize: %d\n", gridSize);
-#ifdef CNC
+        #ifdef CNC
         drawGrid(gridSize);
-#endif
+        #endif
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
         close(client_socket_descriptor);
     } else if(strcmp(query, "/restart")==0){
         initialise(board);
+        gameStarted = 0;
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
         close(client_socket_descriptor);
     }
@@ -305,9 +307,9 @@ int main(int argc, char *argv[]) {
 
     initialise(board); 
 
-#ifdef CNC
+    #ifdef CNC
     initComm();
-#endif
+    #endif
 
     //playTicTacToe(COMPUTER);
 
