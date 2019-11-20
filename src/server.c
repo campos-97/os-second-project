@@ -143,11 +143,14 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
         for (int i = 0; i < 3; ++i) {
             shapes[i] = 0;
         }
+        #ifdef CNC
         drawWin(result, gridSize);
-        sprintf(tmp_str, "win%d", player);
+        #endif
+        sprintf(tmp_str, "win");
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
-        write(client_socket_descriptor, tmp_str, 4);
+        write(client_socket_descriptor, tmp_str, 3);
         close(client_socket_descriptor);
+        sprintf(tmp_str, "lose");
         write(prev_client, html_web_text, sizeof(html_web_text) - 1);
         write(prev_client, tmp_str, 4);
         close(prev_client);
@@ -180,6 +183,10 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
             #ifdef CNC
             drawWin(result, gridSize);
             #endif
+            sprintf(tmp_str, "lose");
+            write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
+            write(client_socket_descriptor, tmp_str, 4);
+            close(client_socket_descriptor);
             return;
         }
     } else {
