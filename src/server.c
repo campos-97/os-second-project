@@ -150,6 +150,7 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
         sprintf(tmp_str, "%d%d", i, j);
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
         write(client_socket_descriptor, tmp_str, 2);
+        close(client_socket_descriptor);
 
         result = gameOver(board);
         if (result != -1) {
@@ -161,6 +162,7 @@ void send_move(int client_socket_descriptor, int player, int i, int j) {
         sprintf(tmp_str, "%d%d", i, j);
         write(prev_client, html_web_text, sizeof(html_web_text) - 1);
         write(prev_client, tmp_str, 2);
+        close(prev_client);
         prev_client = client_socket_descriptor;
     }
 }
@@ -177,21 +179,24 @@ int process_query(int client_socket_descriptor, struct sockaddr client, char* qu
         } else {
             write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
             write(client_socket_descriptor, tmp_str, 1);
+            close(client_socket_descriptor);
         }
         players++;
     }
     else if(strncmp(query, "/play", 5)==0){
         send_move(client_socket_descriptor, query[5]-'0', query[6]-'0', query[7]-'0');
-        write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
+        //write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
     }
     else if(strncmp(query, "/grid", 5)==0){
         gridSize = query[5]-'0'; 
         printf("gridSize: %d\n", gridSize);
         drawGrid(gridSize);
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
+        close(client_socket_descriptor);
     } else if(strcmp(query, "/restart")==0){
         initialise(board);
         write(client_socket_descriptor, html_web_text, sizeof(html_web_text) - 1);
+        close(client_socket_descriptor);
     }
     /*else if(strncmp(query, "/led", 4)==0){                  // Change led
         change_led(query[4], query[5]);
@@ -208,6 +213,7 @@ int process_query(int client_socket_descriptor, struct sockaddr client, char* qu
     else{
         server_log("Unknown query");
         write(client_socket_descriptor, html_web_error, sizeof(html_web_error) - 1);
+        close(client_socket_descriptor);
     }
 }
 
